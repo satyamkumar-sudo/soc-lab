@@ -1,0 +1,10 @@
+services:
+  kube-apiserver:
+    team: platform
+  gke-audit:
+    team: security
+  iam:
+    team: security
+  default:
+    team: app
+

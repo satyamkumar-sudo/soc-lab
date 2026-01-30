@@ -1,0 +1,7 @@
+<clickhouse>
+  <!-- Allow other containers (Grafana/SOC API) to connect over HTTP/TCP -->
+  <listen_host>0.0.0.0</listen_host>
+  <!-- Some Docker environments don't support IPv6 binding; avoid :: to prevent startup failure. -->
+  <listen_try>1</listen_try>
+</clickhouse>
+

@@ -1,0 +1,8 @@
+cidr,country,region,city,asn,as_org
+8.8.8.0/24,US,CA,Mountain View,15169,Google LLC
+1.1.1.0/24,US,CA,San Francisco,13335,Cloudflare, Inc.
+9.9.9.0/24,US,NY,New York,19281,Quad9
+203.0.113.0/24,TEST,TEST,TEST,0,TEST-NET-3
+198.51.100.0/24,TEST,TEST,TEST,0,TEST-NET-2
+192.0.2.0/24,TEST,TEST,TEST,0,TEST-NET-1
+

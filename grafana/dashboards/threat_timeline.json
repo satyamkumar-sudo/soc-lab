@@ -1,0 +1,36 @@
+{
+  "uid": "threat-timeline",
+  "title": "Threat Timeline",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["soc-lab", "timeline"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_CLICKHOUSE",
+        "type": "datasource",
+        "label": "ClickHouse",
+        "query": "grafana-clickhouse-datasource",
+        "current": { "text": "ClickHouse", "value": "ClickHouse" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "table",
+      "title": "Unified Event Timeline (anomalies + rule_matches)",
+      "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT ts, kind, project, cluster, namespace, service, severity, details\nFROM (\n  SELECT created_at AS ts,\n         'anomaly' AS kind,\n         project, cluster, namespace, service,\n         risk_level AS severity,\n         concat(model, ' score=', toString(round(score, 3)), ' ', reason) AS details\n  FROM soc.anomalies\n  WHERE $__timeFilter(created_at)\n\n  UNION ALL\n\n  SELECT created_at AS ts,\n         'signal' AS kind,\n         project, cluster, namespace, service,\n         severity,\n         concat(signal_type, ' ', substring(toJSONString(data), 1, 280)) AS details\n  FROM soc.anomaly_signals\n  WHERE $__timeFilter(created_at)\n\n  UNION ALL\n\n  SELECT created_at AS ts,\n         'rule' AS kind,\n         project, cluster, namespace, service,\n         severity,\n         concat(rule_id, ' ', description) AS details\n  FROM soc.rule_matches\n  WHERE $__timeFilter(created_at)\n)\nORDER BY ts DESC\nLIMIT 500"
+        }
+      ]
+    }
+  ]
+}
+

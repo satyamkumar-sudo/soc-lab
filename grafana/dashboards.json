@@ -1,0 +1,15 @@
+{
+  "dashboards": [
+    "dashboards/soc_end_to_end.json",
+    "dashboards/soc_overview.json",
+    "dashboards/iam_monitoring.json",
+    "dashboards/k8s_security.json",
+    "dashboards/network_threats.json",
+    "dashboards/ai_risk_score.json",
+    "dashboards/llm_incident_summary.json",
+    "dashboards/threat_timeline.json",
+    "dashboards/live_log_explorer.json"
+  ],
+  "notes": "Grafana loads dashboards from grafana/dashboards/*.json via provisioning."
+}
+

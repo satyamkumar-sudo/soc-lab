@@ -1,0 +1,119 @@
+rules:
+  - id: iam.role_changes_burst
+    name: "IAM role changes burst"
+    category: iam
+    severity: high
+    description: ">3 IAM changes within a 5-minute window"
+    type: feature_threshold
+    field: iam_change_count
+    op: ">"
+    value: 3
+
+  - id: iam.owner_role_grant
+    name: "Owner role grant detected"
+    category: iam
+    severity: critical
+    description: "Owner role granted via IAM activity/audit logs"
+    type: log_match
+    match:
+      any_of:
+        - payload_path: ["jsonPayload", "iam", "role"]
+          op: "=="
+          value: "roles/owner"
+        - contains: "roles/owner"
+
+  - id: iam.new_service_account
+    name: "New service account creation"
+    category: iam
+    severity: medium
+    description: "Service account created in window"
+    type: feature_threshold
+    field: new_service_accounts
+    op: ">"
+    value: 0
+
+  - id: k8s.privileged_pod
+    name: "Privileged pod scheduled"
+    category: k8s
+    severity: critical
+    description: "Privileged pod / host access signal"
+    type: log_match
+    match:
+      any_of:
+        - payload_path: ["k8s", "pod_security", "privileged"]
+          op: "=="
+          value: true
+        - payload_path: ["k8s", "pod_security", "hostMount"]
+          op: "=="
+          value: true
+
+  - id: k8s.crashloop_spike
+    name: "CrashLoopBackOff / restarts spike"
+    category: k8s
+    severity: high
+    description: "Elevated pod restart rate"
+    type: feature_threshold
+    field: pod_restart_rate
+    op: ">"
+    value: 1.0
+
+  - id: net.port_scanning_suspected
+    name: "Port scanning suspected"
+    category: network
+    severity: high
+    description: "High IP entropy + high volume"
+    type: feature_threshold
+    expr:
+      all_of:
+        - field: ip_entropy
+          op: ">"
+          value: 2.5
+        - field: total_logs
+          op: ">"
+          value: 200
+
+  - id: net.dns_tunneling_ioc
+    name: "DNS tunneling IOC hit"
+    category: network
+    severity: high
+    description: "Threat intel tag suggests DNS tunneling"
+    type: log_match
+    match:
+      any_of:
+        - contains: "dns_tunnel_suspect"
+
+  - id: app.bruteforce_login
+    name: "Brute force login suspected"
+    category: application
+    severity: high
+    description: "High failed login count in window"
+    type: feature_threshold
+    field: failed_logins
+    op: ">"
+    value: 10
+
+  - id: app.token_abuse
+    name: "Token abuse suspected"
+    category: application
+    severity: medium
+    description: "High token/login traffic share and burstiness"
+    type: feature_threshold
+    field: api_abuse_rate
+    op: ">"
+    value: 0.6
+
+  - id: app.error_flood
+    name: "Error flood suspected"
+    category: application
+    severity: medium
+    description: "Elevated error rate with volume"
+    type: feature_threshold
+    expr:
+      all_of:
+        - field: error_rate
+          op: ">"
+          value: 0.25
+        - field: total_logs
+          op: ">"
+          value: 150
+

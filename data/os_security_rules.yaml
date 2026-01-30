@@ -1,0 +1,262 @@
+# OS-Level Security Threat Detection Rules
+# These rules detect operating system security threats from logs
+
+# ============================================================================
+# AUTHENTICATION & ACCESS CONTROL THREATS
+# ============================================================================
+
+- rule_id: os.failed_ssh_brute_force
+  name: SSH Brute Force Attack Detected
+  severity: critical
+  description: Multiple failed SSH login attempts from same IP
+  pattern:
+    - message_contains: ["Failed password", "authentication failure", "Invalid user"]
+    - severity: ["ERROR", "WARNING"]
+  threshold:
+    count: 5
+    window_minutes: 5
+  tags: [brute-force, ssh, authentication]
+
+- rule_id: os.successful_login_after_failures
+  name: Successful Login After Multiple Failures
+  severity: high
+  description: Successful authentication after repeated failures - potential credential stuffing
+  pattern:
+    - message_contains: ["Accepted password", "Accepted publickey"]
+    - previous_failures: true
+  tags: [authentication, credential-stuffing, login]
+
+- rule_id: os.root_login_detected
+  name: Direct Root Login Attempt
+  severity: critical
+  description: Direct root login detected - violates security policy
+  pattern:
+    - message_contains: ["root", "uid=0"]
+    - service_contains: ["sshd", "login", "su", "sudo"]
+  tags: [privilege, root-access, authentication]
+
+- rule_id: os.sudo_abuse
+  name: Suspicious Sudo Usage
+  severity: high
+  description: Unusual or excessive sudo command execution
+  pattern:
+    - message_contains: ["sudo:", "COMMAND="]
+    - identity_not: ["admin", "ansible", "jenkins"]
+  threshold:
+    count: 10
+    window_minutes: 10
+  tags: [privilege-escalation, sudo]
+
+- rule_id: os.privilege_escalation_attempt
+  name: Privilege Escalation Attempt
+  severity: critical
+  description: Attempt to escalate privileges detected
+  pattern:
+    - message_contains: 
+      - "setuid"
+      - "setgid"
+      - "/etc/passwd"
+      - "/etc/shadow"
+      - "chmod 4755"
+      - "SUID"
+  tags: [privilege-escalation, exploit]
+
+# ============================================================================
+# NETWORK & LATERAL MOVEMENT THREATS
+# ============================================================================
+
+- rule_id: os.port_scan_detected
+  name: Port Scanning Activity
+  severity: high
+  description: Port scanning behavior detected from single IP
+  pattern:
+    - message_contains: ["Connection refused", "Connection reset", "No route to host"]
+  threshold:
+    unique_ports: 20
+    window_minutes: 5
+  tags: [reconnaissance, port-scan, network]
+
+- rule_id: os.lateral_movement
+  name: Lateral Movement Detected
+  severity: critical
+  description: Suspicious lateral movement across multiple hosts
+  pattern:
+    - message_contains: ["ssh", "psexec", "wmic", "rdp"]
+    - source_ip_internal: true
+  threshold:
+    unique_targets: 5
+    window_minutes: 15
+  tags: [lateral-movement, pivoting]
+
+- rule_id: os.reverse_shell_attempt
+  name: Reverse Shell Connection Attempt
+  severity: critical
+  description: Potential reverse shell detected
+  pattern:
+    - message_contains: 
+      - "/bin/bash -i"
+      - "nc -e /bin/sh"
+      - "/dev/tcp/"
+      - "bash -c"
+      - "python -c"
+  tags: [backdoor, reverse-shell, malware]
+
+# ============================================================================
+# FILE SYSTEM & DATA EXFILTRATION THREATS
+# ============================================================================
+
+- rule_id: os.sensitive_file_access
+  name: Sensitive File Access Attempt
+  severity: high
+  description: Access attempt to sensitive system files
+  pattern:
+    - message_contains:
+      - "/etc/shadow"
+      - "/etc/passwd"
+      - "~/.ssh/id_rsa"
+      - "/root/.ssh/"
+      - "authorized_keys"
+      - ".aws/credentials"
+      - ".kube/config"
+  tags: [data-access, credentials, sensitive-data]
+
+- rule_id: os.mass_file_download
+  name: Mass File Download/Exfiltration
+  severity: critical
+  description: Large volume of file downloads - potential data exfiltration
+  pattern:
+    - message_contains: ["GET", "download", "transfer"]
+    - size_mb_greater_than: 100
+  threshold:
+    count: 10
+    window_minutes: 10
+  tags: [exfiltration, data-theft]
+
+- rule_id: os.file_permission_change
+  name: Critical File Permission Change
+  severity: high
+  description: Permissions changed on critical system files
+  pattern:
+    - message_contains: ["chmod", "chown", "setfacl"]
+    - path_contains: ["/etc/", "/bin/", "/sbin/", "/usr/bin/"]
+  tags: [persistence, file-modification]
+
+# ============================================================================
+# PROCESS & EXECUTION THREATS
+# ============================================================================
+
+- rule_id: os.suspicious_process_execution
+  name: Suspicious Process Execution
+  severity: high
+  description: Execution of potentially malicious process
+  pattern:
+    - message_contains:
+      - "curl | bash"
+      - "wget | sh"
+      - "base64 -d"
+      - "/tmp/.*\.sh"
+      - "nmap"
+      - "masscan"
+      - "metasploit"
+  tags: [malware, suspicious-execution]
+
+- rule_id: os.crypto_miner_detected
+  name: Cryptocurrency Miner Detected
+  severity: critical
+  description: Crypto mining activity detected
+  pattern:
+    - message_contains: 
+      - "xmrig"
+      - "minerd"
+      - "cpuminer"
+      - "stratum+tcp"
+      - "cryptonight"
+      - "monero"
+  tags: [cryptomining, resource-abuse]
+
+- rule_id: os.container_escape_attempt
+  name: Container Escape Attempt
+  severity: critical
+  description: Attempt to escape container detected
+  pattern:
+    - message_contains:
+      - "/proc/self/exe"
+      - "docker.sock"
+      - "/var/run/docker.sock"
+      - "runc"
+      - "cgroups release_agent"
+  tags: [container-escape, privilege-escalation]
+
+# ============================================================================
+# PERSISTENCE & BACKDOOR THREATS
+# ============================================================================
+
+- rule_id: os.cron_job_modification
+  name: Cron Job Modification Detected
+  severity: high
+  description: Cron job added/modified - potential persistence mechanism
+  pattern:
+    - message_contains: ["crontab", "/etc/cron"]
+    - severity: ["INFO", "WARNING"]
+  tags: [persistence, scheduled-task]
+
+- rule_id: os.ssh_key_added
+  name: SSH Key Added to authorized_keys
+  severity: high
+  description: New SSH key added - potential backdoor
+  pattern:
+    - message_contains: ["authorized_keys", "ssh-rsa", "ssh-ed25519"]
+    - operation: ["write", "append", "modify"]
+  tags: [persistence, backdoor, ssh]
+
+- rule_id: os.systemd_service_created
+  name: New Systemd Service Created
+  severity: medium
+  description: New systemd service created - monitor for persistence
+  pattern:
+    - message_contains: ["systemctl", "systemd", ".service"]
+    - operation: ["enable", "start", "create"]
+  tags: [persistence, service-creation]
+
+# ============================================================================
+# ANOMALOUS BEHAVIOR & INDICATORS
+# ============================================================================
+
+- rule_id: os.unusual_login_time
+  name: Login at Unusual Time
+  severity: medium
+  description: User login outside normal business hours
+  pattern:
+    - message_contains: ["login", "session opened"]
+    - time_outside: ["09:00-18:00"]
+  tags: [anomaly, off-hours-access]
+
+- rule_id: os.geolocation_anomaly
+  name: Login from Unusual Geographic Location
+  severity: high
+  description: User login from unexpected country/region
+  pattern:
+    - message_contains: ["login", "authentication"]
+    - geo_country_not: ["US", "IN", "GB"]
+  tags: [anomaly, geolocation, suspicious-login]
+
+- rule_id: os.password_spray_attack
+  name: Password Spray Attack
+  severity: critical
+  description: Multiple accounts targeted with same password - password spraying
+  pattern:
+    - message_contains: ["Failed password", "authentication failure"]
+  threshold:
+    unique_users: 10
+    window_minutes: 10
+  tags: [brute-force, password-spray, authentication]
+
+- rule_id: os.impossible_travel
+  name: Impossible Travel Detected
+  severity: critical
+  description: User logged in from two distant locations in impossible timeframe
+  pattern:
+    - message_contains: ["login", "session"]
+    - geo_distance_km_greater_than: 1000
+    - time_between_minutes_less_than: 60
+  tags: [credential-theft, account-compromise, anomaly]

@@ -1,0 +1,618 @@
+{
+  "uid": "enterprise-soc",
+  "title": "SOC Ops (Production)",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 4,
+  "refresh": "30s",
+  "tags": ["soc-lab", "production"],
+  "time": { "from": "now-6h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "DS_CLICKHOUSE",
+        "type": "datasource",
+        "label": "ClickHouse",
+        "query": "grafana-clickhouse-datasource",
+        "current": { "text": "ClickHouse", "value": "ClickHouse" }
+      },
+      {
+        "name": "project",
+        "type": "query",
+        "label": "Project",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+        "query": "SELECT distinct project FROM soc.raw_logs ORDER BY project",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
+      },
+      {
+        "name": "cluster",
+        "type": "query",
+        "label": "Cluster",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+        "query": "SELECT distinct cluster FROM soc.raw_logs WHERE match(project, '$project') ORDER BY cluster",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
+      },
+      {
+        "name": "namespace",
+        "type": "query",
+        "label": "Namespace",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+        "query": "SELECT distinct namespace FROM soc.raw_logs WHERE match(project, '$project') AND match(cluster, '$cluster') ORDER BY namespace",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
+      },
+      {
+        "name": "service",
+        "type": "query",
+        "label": "Service",
+        "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+        "query": "SELECT distinct service FROM soc.raw_logs WHERE match(project, '$project') AND match(cluster, '$cluster') AND match(namespace, '$namespace') ORDER BY service",
+        "refresh": 1,
+        "multi": false,
+        "includeAll": true,
+        "allValue": ".*",
+        "current": { "text": "All", "value": ".*" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "table",
+      "title": "🚨 TOP 10 SECURITY THREATS (Last 24h)",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "WITH threat_data AS (\n  SELECT\n    rule_id,\n    rule_name,\n    severity,\n    description,\n    count() AS occurrences,\n    uniq(service) AS affected_services,\n    uniq(identity) AS unique_identities,\n    uniq(namespace) AS affected_namespaces,\n    max(created_at) AS last_seen,\n    multiIf(\n      severity='critical', 1,\n      severity='high', 2,\n      severity='medium', 3,\n      severity='low', 4,\n      5\n    ) AS severity_order\n  FROM soc.rule_matches\n  WHERE created_at >= now() - INTERVAL 24 HOUR\n    AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\n  GROUP BY rule_id, rule_name, severity, description\n)\nSELECT\n  rule_name AS \"Threat Name\",\n  severity AS \"Severity\",\n  occurrences AS \"Count (24h)\",\n  affected_services AS \"Services\",\n  affected_namespaces AS \"Namespaces\",\n  unique_identities AS \"Users/IDs\",\n  formatDateTime(last_seen, '%Y-%m-%d %H:%M') AS \"Last Seen\",\n  substring(description, 1, 80) AS \"Description\"\nFROM threat_data\nORDER BY severity_order ASC, occurrences DESC\nLIMIT 10"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Severity" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "mappings", "value": [
+              { "type": "value", "options": { "critical": { "color": "dark-red", "text": "CRITICAL" } } },
+              { "type": "value", "options": { "high": { "color": "dark-orange", "text": "HIGH" } } },
+              { "type": "value", "options": { "medium": { "color": "dark-yellow", "text": "MEDIUM" } } },
+              { "type": "value", "options": { "low": { "color": "dark-blue", "text": "LOW" } } }
+            ]}
+          ]},
+          { "matcher": { "id": "byName", "options": "Count (24h)" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 10 },
+                { "color": "orange", "value": 50 },
+                { "color": "red", "value": 100 }
+              ]
+            }}
+          ]}
+        ]
+      },
+      "options": { "showHeader": true, "sortBy": [] }
+    },
+
+    {
+      "type": "table",
+      "title": "🔐 LOGIN ATTEMPTS ANALYSIS (Last 24h)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 9 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  ip AS \"Source IP\",\n  identity AS \"User/Identity\",\n  geo_country AS \"Country\",\n  service AS \"Service\",\n  namespace AS \"Namespace\",\n  countIf(severity_num >= 40 OR status_code >= 400) AS \"Failed Attempts\",\n  countIf(severity_num < 40 AND status_code < 400) AS \"Successful Logins\",\n  count() AS \"Total Attempts\",\n  round(countIf(severity_num >= 40) * 100.0 / count(), 1) AS \"Failure Rate %\",\n  max(timestamp) AS \"Last Attempt\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 24 HOUR\n  AND (\n    positionCaseInsensitive(method, 'login') > 0 OR\n    positionCaseInsensitive(method, 'auth') > 0 OR\n    positionCaseInsensitive(message, 'login') > 0 OR\n    positionCaseInsensitive(message, 'authentication') > 0 OR\n    positionCaseInsensitive(message, 'Wrong pin') > 0 OR\n    positionCaseInsensitive(message, 'Failed password') > 0\n  )\n  AND ip != ''\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY ip, identity, geo_country, service, namespace\nORDER BY \"Failed Attempts\" DESC, \"Total Attempts\" DESC\nLIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Failed Attempts" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 3 },
+                { "color": "orange", "value": 10 },
+                { "color": "red", "value": 50 }
+              ]
+            }}
+          ]},
+          { "matcher": { "id": "byName", "options": "Failure Rate %" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 30 },
+                { "color": "orange", "value": 60 },
+                { "color": "red", "value": 80 }
+              ]
+            }}
+          ]}
+        ]
+      }
+    },
+
+    {
+      "type": "stat",
+      "title": "Total Logs (24h)",
+      "gridPos": { "h": 3, "w": 4, "x": 0, "y": 17 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.enriched_logs WHERE timestamp >= now() - INTERVAL 24 HOUR AND method != 'k8s.inventory' AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "Total Anomalies (24h)",
+      "gridPos": { "h": 3, "w": 4, "x": 4, "y": 17 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.anomalies WHERE created_at >= now() - INTERVAL 24 HOUR AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }, { "color": "red", "value": 100 }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "Total Signals (24h)",
+      "gridPos": { "h": 3, "w": 4, "x": 8, "y": 17 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.anomaly_signals WHERE window_start >= now() - INTERVAL 24 HOUR AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "Rule Matches (24h)",
+      "gridPos": { "h": 3, "w": 4, "x": 12, "y": 17 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.rule_matches WHERE created_at >= now() - INTERVAL 24 HOUR AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "Critical Incidents (24h)",
+      "gridPos": { "h": 3, "w": 4, "x": 16, "y": 17 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT countIf(risk_level='critical') AS value FROM soc.anomalies WHERE created_at >= now() - INTERVAL 24 HOUR AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "red", "value": 1 }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "Ingest Lag (min)",
+      "gridPos": { "h": 3, "w": 4, "x": 20, "y": 17 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT dateDiff('minute', max(timestamp), now()) AS value FROM soc.enriched_logs WHERE method != 'k8s.inventory'"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "yellow", "value": 10 }, { "color": "red", "value": 30 }] }
+        }
+      },
+      "options": { "graphMode": "none", "colorMode": "background" }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "Detections Timeline (5m)",
+      "gridPos": { "h": 8, "w": 16, "x": 0, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(created_at) AS time,\n  countIf(risk_level='critical') AS \"Critical\",\n  countIf(risk_level='high') AS \"High\",\n  countIf(risk_level='medium') AS \"Medium\",\n  countIf(risk_level='low') AS \"Low\"\nFROM soc.anomalies\nWHERE $__timeFilter(created_at)\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY time\nORDER BY time"
+        },
+        {
+          "refId": "B",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(window_start) AS time,\n  count() AS \"Anomaly Signals\"\nFROM soc.anomaly_signals\nWHERE $__timeFilter(window_start)\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY time\nORDER BY time"
+        },
+        {
+          "refId": "C",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(created_at) AS time,\n  count() AS \"Rule Matches\"\nFROM soc.rule_matches\nWHERE $__timeFilter(created_at)\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Critical" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }] },
+          { "matcher": { "id": "byName", "options": "High" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-orange" } }] },
+          { "matcher": { "id": "byName", "options": "Medium" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-yellow" } }] },
+          { "matcher": { "id": "byName", "options": "Low" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-blue" } }] },
+          { "matcher": { "id": "byName", "options": "Anomaly Signals" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] },
+          { "matcher": { "id": "byName", "options": "Rule Matches" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] }
+        ]
+      }
+    },
+
+    {
+      "type": "piechart",
+      "title": "Detections by Severity (24h)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  multiIf(\n    risk_level='critical', 'Critical',\n    risk_level='high', 'High',\n    risk_level='medium', 'Medium',\n    risk_level='low', 'Low',\n    'Unknown'\n  ) AS severity_label,\n  count() AS value\nFROM soc.anomalies\nWHERE created_at >= now() - INTERVAL 24 HOUR\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY severity_label\nORDER BY multiIf(severity_label='Critical',1,severity_label='High',2,severity_label='Medium',3,severity_label='Low',4,5)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Critical" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }] },
+          { "matcher": { "id": "byName", "options": "High" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-orange" } }] },
+          { "matcher": { "id": "byName", "options": "Medium" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-yellow" } }] },
+          { "matcher": { "id": "byName", "options": "Low" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-blue" } }] }
+        ]
+      },
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "pieType": "pie",
+        "tooltip": { "mode": "single" }
+      }
+    },
+
+    {
+      "type": "geomap",
+      "title": "🌍 Global Threat Map (24h)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 28 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  geo_country,\n  count() AS threat_count,\n  CASE\n    WHEN geo_country = 'US' THEN 37.09\n    WHEN geo_country = 'RU' THEN 61.52\n    WHEN geo_country = 'CN' THEN 35.86\n    WHEN geo_country = 'IN' THEN 20.59\n    WHEN geo_country = 'GB' THEN 55.38\n    WHEN geo_country = 'DE' THEN 51.17\n    WHEN geo_country = 'FR' THEN 46.23\n    WHEN geo_country = 'JP' THEN 36.20\n    WHEN geo_country = 'AU' THEN -25.27\n    WHEN geo_country = 'CA' THEN 56.13\n    WHEN geo_country = 'BR' THEN -14.24\n    WHEN geo_country = 'MX' THEN 23.63\n    WHEN geo_country = 'IT' THEN 41.87\n    WHEN geo_country = 'ES' THEN 40.46\n    WHEN geo_country = 'NL' THEN 52.13\n    WHEN geo_country = 'SE' THEN 60.13\n    WHEN geo_country = 'PL' THEN 51.92\n    WHEN geo_country = 'UA' THEN 48.38\n    WHEN geo_country = 'KR' THEN 35.91\n    WHEN geo_country = 'ZA' THEN -30.56\n    ELSE NULL\n  END AS latitude,\n  CASE\n    WHEN geo_country = 'US' THEN -95.71\n    WHEN geo_country = 'RU' THEN 105.32\n    WHEN geo_country = 'CN' THEN 104.20\n    WHEN geo_country = 'IN' THEN 78.96\n    WHEN geo_country = 'GB' THEN -3.44\n    WHEN geo_country = 'DE' THEN 10.45\n    WHEN geo_country = 'FR' THEN 2.21\n    WHEN geo_country = 'JP' THEN 138.25\n    WHEN geo_country = 'AU' THEN 133.78\n    WHEN geo_country = 'CA' THEN -106.35\n    WHEN geo_country = 'BR' THEN -51.93\n    WHEN geo_country = 'MX' THEN -102.55\n    WHEN geo_country = 'IT' THEN 12.57\n    WHEN geo_country = 'ES' THEN -3.75\n    WHEN geo_country = 'NL' THEN 5.29\n    WHEN geo_country = 'SE' THEN 18.64\n    WHEN geo_country = 'PL' THEN 19.15\n    WHEN geo_country = 'UA' THEN 31.17\n    WHEN geo_country = 'KR' THEN 127.77\n    WHEN geo_country = 'ZA' THEN 22.94\n    ELSE NULL\n  END AS longitude\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 24 HOUR\n  AND geo_country != 'UNKNOWN'\n  AND geo_country != ''\n  AND (severity IN ('ERROR', 'CRITICAL', 'WARNING') OR status_code >= 400)\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY geo_country\nHAVING latitude IS NOT NULL AND longitude IS NOT NULL\nORDER BY threat_count DESC"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "hideFrom": { "tooltip": false, "viz": false, "legend": false }
+          }
+        }
+      },
+      "options": {
+        "view": { "id": "coords", "lat": 20, "lon": 0, "zoom": 2 },
+        "controls": { "showZoom": true, "showAttribution": true },
+        "basemap": { "type": "default" },
+        "layers": [
+          {
+            "type": "markers",
+            "config": {
+              "size": { "fixed": 8, "min": 5, "max": 20, "field": "threat_count" },
+              "color": { "fixed": "red" },
+              "fillOpacity": 0.7
+            },
+            "location": { "mode": "coords", "latitude": "latitude", "longitude": "longitude" },
+            "tooltip": true
+          }
+        ]
+      }
+    },
+
+    {
+      "type": "table",
+      "title": "🌐 Threats by Country",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 28 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  geo_country AS \"Country\",\n  count() AS \"Total Threats\",\n  uniq(ip) AS \"Unique IPs\",\n  uniq(service) AS \"Services Targeted\",\n  countIf(severity='CRITICAL') AS \"Critical\",\n  countIf(severity='ERROR') AS \"Errors\",\n  countIf(severity='WARNING') AS \"Warnings\",\n  round(avg(status_code), 0) AS \"Avg Status Code\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 24 HOUR\n  AND geo_country != 'UNKNOWN'\n  AND geo_country != ''\n  AND (severity IN ('ERROR', 'CRITICAL', 'WARNING') OR status_code >= 400)\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY geo_country\nORDER BY \"Total Threats\" DESC\nLIMIT 20"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Total Threats" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 100 },
+                { "color": "orange", "value": 500 },
+                { "color": "red", "value": 1000 }
+              ]
+            }}
+          ]},
+          { "matcher": { "id": "byName", "options": "Critical" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "red", "value": 1 }
+              ]
+            }}
+          ]}
+        ]
+      }
+    },
+
+    {
+      "type": "bargauge",
+      "title": "Top 10 Services by Error Rate",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 38 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  service,\n  round(countIf(severity IN ('ERROR', 'CRITICAL')) * 100.0 / count(), 2) AS error_rate\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 24 HOUR\n  AND service != ''\n  AND method != 'k8s.inventory'\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY service\nHAVING count() >= 100\nORDER BY error_rate DESC\nLIMIT 10"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "Service Response Times (P50, P95, P99)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 38 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(timestamp) AS time,\n  quantile(0.50)(status_code) AS \"P50\",\n  quantile(0.95)(status_code) AS \"P95\",\n  quantile(0.99)(status_code) AS \"P99\"\nFROM soc.enriched_logs\nWHERE $__timeFilter(timestamp)\n  AND status_code > 0\n  AND method != 'k8s.inventory'\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        }
+      }
+    },
+
+    {
+      "type": "table",
+      "title": "🔴 LIVE: Recent Error Logs (Last Hour)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 46 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  timestamp AS time,\n  service,\n  namespace,\n  severity,\n  ip,\n  identity,\n  substring(message, 1, 150) AS error_message\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 1 HOUR\n  AND (severity = 'ERROR' OR severity = 'CRITICAL' OR severity = 'WARNING')\n  AND method != 'k8s.inventory'\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')\nORDER BY timestamp DESC\nLIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "severity" }, "properties": [{ "id": "custom.cellOptions", "value": { "type": "color-background" } }] }
+        ]
+      }
+    },
+
+    {
+      "type": "stat",
+      "title": "🔴 LIVE: Active Anomalies (Last Hour)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 56 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value\nFROM soc.anomalies\nWHERE created_at >= now() - INTERVAL 1 HOUR\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "orange", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "🔴 LIVE: Critical Signals (Last Hour)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 56 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value\nFROM soc.anomaly_signals\nWHERE window_start >= now() - INTERVAL 1 HOUR\n  AND severity IN ('critical', 'high')\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 20 }
+            ]
+          }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "🔴 LIVE: Services with Errors (Last Hour)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 56 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT uniq(service) AS value\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 1 HOUR\n  AND (severity = 'ERROR' OR severity = 'CRITICAL')\n  AND method != 'k8s.inventory'\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "orange", "value": 7 },
+              { "color": "red", "value": 15 }
+            ]
+          }
+        }
+      },
+      "options": { "graphMode": "none", "colorMode": "background" }
+    },
+
+    {
+      "type": "stat",
+      "title": "🔴 LIVE: Error Rate (Last Hour)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 56 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT round(countIf(severity IN ('ERROR', 'CRITICAL')) * 100.0 / count(), 2) AS value\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 1 HOUR\n  AND method != 'k8s.inventory'\n  AND match(project,'$project') AND match(cluster,'$cluster') AND match(namespace,'$namespace') AND match(service,'$service')"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "orange", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    }
+  ]
+}

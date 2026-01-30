@@ -1,0 +1,10 @@
+<clickhouse>
+  <profiles>
+    <default>
+      <!-- Required to use the JSON data type in ClickHouse 24.8 -->
+      <allow_experimental_json_type>1</allow_experimental_json_type>
+      <allow_experimental_object_type>1</allow_experimental_object_type>
+    </default>
+  </profiles>
+</clickhouse>
+

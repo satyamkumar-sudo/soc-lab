@@ -1,0 +1,62 @@
+{
+  "uid": "iam-monitoring",
+  "title": "IAM Monitoring",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["soc-lab", "iam"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_CLICKHOUSE",
+        "type": "datasource",
+        "label": "ClickHouse",
+        "query": "grafana-clickhouse-datasource",
+        "current": { "text": "ClickHouse", "value": "ClickHouse" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "IAM Change Count (features)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT window_start AS time,\n       sum(iam_change_count) AS value\nFROM soc.features\nWHERE $__timeFilter(window_start)\nGROUP BY time\nORDER BY time"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "New Service Accounts (features)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT window_start AS time,\n       sum(new_service_accounts) AS value\nFROM soc.features\nWHERE $__timeFilter(window_start)\nGROUP BY time\nORDER BY time"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "IAM Rule Matches (last 7d)",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT *\nFROM (\n  SELECT created_at, window, project, identity, rule_id, severity, description\n  FROM soc.rule_matches\n  WHERE window >= now() - INTERVAL 7 DAY AND startsWith(rule_id, 'iam.')\n  ORDER BY created_at DESC\n  LIMIT 200\n)\nORDER BY created_at ASC"
+        }
+      ]
+    }
+  ]
+}
+

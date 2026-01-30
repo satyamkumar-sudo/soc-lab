@@ -1,0 +1,24 @@
+fastapi~=0.115
+uvicorn[standard]~=0.30
+clickhouse-driver~=0.2
+pandas~=2.2
+numpy~=2.0
+scikit-learn~=1.5
+pydantic~=2.9
+pydantic-settings~=2.5
+structlog~=24.4
+PyYAML~=6.0
+requests~=2.32
+tenacity~=9.0
+cachetools~=5.5
+kubernetes~=31.0
+
+# GCP / Vertex AI
+google-auth~=2.35
+google-cloud-aiplatform~=1.71
+google-genai~=1.4
+google-generativeai~=0.8
+google-cloud-logging~=3.11
+google-cloud-container~=2.53
+google-cloud-secret-manager~=2.20
+

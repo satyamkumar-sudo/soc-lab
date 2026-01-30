@@ -1,0 +1,7 @@
+indicator_type,indicator,tag,confidence
+ip,45.142.120.10,known_scanner,0.7
+ip,185.220.101.33,tor_exit_node,0.8
+ip,198.51.100.77,dns_tunnel_suspect,0.6
+user,service-account@company.com,automated_service,0.4
+service,auth-service,brute_force_target,0.5
+

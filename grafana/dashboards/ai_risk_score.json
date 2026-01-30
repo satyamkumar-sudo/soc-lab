@@ -1,0 +1,62 @@
+{
+  "uid": "ai-risk-score",
+  "title": "AI Risk Score",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "tags": ["soc-lab", "ai"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_CLICKHOUSE",
+        "type": "datasource",
+        "label": "ClickHouse",
+        "query": "grafana-clickhouse-datasource",
+        "current": { "text": "ClickHouse", "value": "ClickHouse" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Anomaly Score Over Time",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT window AS time,\n       avg(score) AS value\nFROM soc.anomalies\nWHERE $__timeFilter(window)\nGROUP BY time\nORDER BY time"
+        }
+      ]
+    },
+    {
+      "type": "piechart",
+      "title": "Risk Level Distribution (7d)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT risk_level AS name, count() AS value\nFROM soc.anomalies\nWHERE window >= now() - INTERVAL 7 DAY\nGROUP BY risk_level\nORDER BY value DESC"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Top Risk Services (7d)",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 10 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT project, cluster, namespace, service,\n       count() AS anomalies,\n       avg(score) AS avg_score\nFROM soc.anomalies\nWHERE window >= now() - INTERVAL 7 DAY\nGROUP BY project, cluster, namespace, service\nORDER BY avg_score DESC\nLIMIT 50"
+        }
+      ]
+    }
+  ]
+}
+

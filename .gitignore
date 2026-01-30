@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Secrets & Credentials
+secrets/*.json
+secrets/gcp-sa.json
+kubeconfig/
+*.pem
+*.key
+.env.local
+
+# Docker
+.dockerignore
+
+# Airflow
+logs/
+airflow.db
+airflow-*.pid
+
+# ClickHouse data
+clickhouse_data/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Temporary files
+*.log
+*.tmp
+.cache/

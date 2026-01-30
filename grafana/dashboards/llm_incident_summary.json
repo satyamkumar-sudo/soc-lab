@@ -1,0 +1,36 @@
+{
+  "uid": "llm-incident-summary",
+  "title": "LLM Incident Summary",
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "tags": ["soc-lab", "llm"],
+  "templating": {
+    "list": [
+      {
+        "name": "DS_CLICKHOUSE",
+        "type": "datasource",
+        "label": "ClickHouse",
+        "query": "grafana-clickhouse-datasource",
+        "current": { "text": "ClickHouse", "value": "ClickHouse" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "table",
+      "title": "Latest Incident Summaries (LLM or fallback)",
+      "gridPos": { "h": 18, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT *\nFROM (\n  SELECT created_at, window, project, cluster, namespace, service, risk_level, model, score, confidence,\n         (llm_summary != '') AS llm_present,\n         substring(if(llm_summary != '', llm_summary, reason), 1, 800) AS llm_summary\n  FROM soc.anomalies\n  WHERE window >= now() - INTERVAL 7 DAY\n  ORDER BY created_at DESC\n  LIMIT 100\n)\nORDER BY created_at ASC"
+        }
+      ]
+    }
+  ]
+}
+

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Lab - Real-Time Alerts Test</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+        
+        .header h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .status {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-radius: 25px;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+        
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        .status.connected .status-dot {
+            background: #28a745;
+        }
+        
+        .status.disconnected .status-dot {
+            background: #dc3545;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card h3 {
+            color: #666;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        
+        .stat-card .value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .alerts-container {
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+        
+        .alerts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+        
+        .alerts-header h2 {
+            color: #333;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        button.primary {
+            background: #667eea;
+            color: white;
+        }
+        
+        button.primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button.secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        button.secondary:hover {
+            background: #e0e0e0;
+        }
+        
+        .alert-item {
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            border-left: 4px solid;
+            background: #f9f9f9;
+            animation: slideIn 0.5s ease;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+        
+        .alert-item.critical {
+            border-left-color: #dc3545;
+            background: #fff5f5;
+        }
+        
+        .alert-item.high {
+            border-left-color: #fd7e14;
+            background: #fff8f0;
+        }
+        
+        .alert-item.medium {
+            border-left-color: #ffc107;
+            background: #fffef0;
+        }
+        
+        .alert-item.low {
+            border-left-color: #17a2b8;
+            background: #f0f9ff;
+        }
+        
+        .alert-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 10px;
+        }
+        
+        .alert-title {
+            font-weight: bold;
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .alert-badge {
+            padding: 5px 12px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .alert-badge.critical {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .alert-badge.high {
+            background: #fd7e14;
+            color: white;
+        }
+        
+        .alert-badge.medium {
+            background: #ffc107;
+            color: #000;
+        }
+        
+        .alert-badge.low {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .alert-meta {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        
+        .alert-message {
+            color: #555;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 80px;
+            height: 80px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 SOC Lab - Real-Time Alerts Monitor</h1>
+            <p>WebSocket endpoint: <code>ws://localhost:8088/ws/alerts</code></p>
+            <div class="status disconnected" id="status">
+                <div class="status-dot"></div>
+                <span>Disconnected</span>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Alerts</h3>
+                <div class="value" id="totalAlerts">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Critical</h3>
+                <div class="value" style="color: #dc3545;" id="criticalCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>High</h3>
+                <div class="value" style="color: #fd7e14;" id="highCount">0</div>
+            </div>
+            <div class="stat-card">
+                <h3>Medium</h3>
+                <div class="value" style="color: #ffc107;" id="mediumCount">0</div>
+            </div>
+        </div>
+        
+        <div class="alerts-container">
+            <div class="alerts-header">
+                <h2>Live Alerts Feed</h2>
+                <div class="controls">
+                    <button class="primary" onclick="connectWebSocket()">Connect</button>
+                    <button class="secondary" onclick="clearAlerts()">Clear</button>
+                </div>
+            </div>
+            
+            <div id="alertsList">
+                <div class="empty-state">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                    </svg>
+                    <p>No alerts yet. Connect to WebSocket to start monitoring.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let ws = null;
+        let alerts = [];
+        
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.querySelector('span').textContent = 'Connected';
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.querySelector('span').textContent = 'Disconnected';
+            }
+        }
+        
+        function updateStats() {
+            document.getElementById('totalAlerts').textContent = alerts.length;
+            document.getElementById('criticalCount').textContent = 
+                alerts.filter(a => a.risk_level === 'critical').length;
+            document.getElementById('highCount').textContent = 
+                alerts.filter(a => a.risk_level === 'high').length;
+            document.getElementById('mediumCount').textContent = 
+                alerts.filter(a => a.risk_level === 'medium').length;
+        }
+        
+        function renderAlert(alert) {
+            return `
+                <div class="alert-item ${alert.risk_level || 'low'}">
+                    <div class="alert-header">
+                        <div class="alert-title">${alert.title || 'Untitled Alert'}</div>
+                        <div class="alert-badge ${alert.risk_level || 'low'}">
+                            ${alert.risk_level || 'low'}
+                        </div>
+                    </div>
+                    <div class="alert-meta">
+                        ${new Date(alert.created_at).toLocaleString()} • 
+                        Channel: ${alert.channel || 'none'} • 
+                        ID: ${alert.id || 'N/A'}
+                    </div>
+                    <div class="alert-message">${alert.message || 'No message'}</div>
+                </div>
+            `;
+        }
+        
+        function updateAlertsList() {
+            const listEl = document.getElementById('alertsList');
+            if (alerts.length === 0) {
+                listEl.innerHTML = `
+                    <div class="empty-state">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                        </svg>
+                        <p>No alerts received yet. Waiting for new alerts...</p>
+                    </div>
+                `;
+            } else {
+                listEl.innerHTML = alerts.slice(0, 50).map(renderAlert).join('');
+            }
+        }
+        
+        function addAlert(alert) {
+            alerts.unshift(alert);
+            updateStats();
+            updateAlertsList();
+            
+            // Play notification sound (optional)
+            if (alert.risk_level === 'critical' || alert.risk_level === 'high') {
+                // You can add a sound notification here
+                console.log('🚨 HIGH PRIORITY ALERT:', alert.title);
+            }
+        }
+        
+        function connectWebSocket() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                console.log('Already connected');
+                return;
+            }
+            
+            ws = new WebSocket('ws://localhost:8088/ws/alerts');
+            
+            ws.onopen = () => {
+                console.log('✅ Connected to alerts stream');
+                updateStatus(true);
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Received:', data);
+                
+                switch(data.type) {
+                    case 'connected':
+                        console.log(data.message);
+                        break;
+                    
+                    case 'alert':
+                        addAlert(data.data);
+                        break;
+                    
+                    case 'pong':
+                        console.log('Pong received');
+                        break;
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+            
+            ws.onclose = () => {
+                console.log('Disconnected from alerts stream');
+                updateStatus(false);
+            };
+        }
+        
+        function clearAlerts() {
+            if (confirm('Clear all alerts from the display?')) {
+                alerts = [];
+                updateStats();
+                updateAlertsList();
+            }
+        }
+        
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            setTimeout(connectWebSocket, 1000);
+            
+            // Send ping every 30 seconds to keep connection alive
+            setInterval(() => {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send('ping');
+                }
+            }, 30000);
+        });
+    </script>
+</body>
+</html>
