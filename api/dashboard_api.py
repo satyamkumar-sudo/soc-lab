@@ -569,3 +569,103 @@ def build_soc_dashboard_data(
             }
         },
     }
+
+
+def format_logs_for_frontend(ch, start: dt.datetime, end: dt.datetime, limit: int = 500) -> list[dict[str, Any]]:
+    """
+    Format logs in the exact structure expected by the React frontend.
+    Matches the mockLogs format from the frontend code.
+    """
+    query = f"""
+    SELECT
+        concat(toString(id), '-', toString(toUnixTimestamp(timestamp))) AS log_id,
+        timestamp,
+        severity,
+        service,
+        namespace,
+        pod,
+        method,
+        message,
+        ip,
+        identity,
+        status_code,
+        geo_country,
+        geo_city
+    FROM soc.enriched_logs
+    WHERE timestamp >= %(start)s AND timestamp <= %(end)s
+      AND method != 'k8s.inventory'
+    ORDER BY timestamp DESC
+    LIMIT %(limit)s
+    """
+    
+    rows = ch.fetch_dicts(query, {"start": start, "end": end, "limit": limit})
+    
+    frontend_logs = []
+    for row in rows:
+        msg_lower = str(row.get("message", "")).lower()
+        method_lower = str(row.get("method", "")).lower()
+        severity = str(row.get("severity", "")).upper()
+        status = row.get("status_code", 0)
+        
+        # Determine log type
+        log_type = "network_event"
+        if any(x in msg_lower for x in ["failed", "wrong", "denied", "unauthorized", "invalid"]):
+            if any(x in msg_lower for x in ["login", "auth", "password", "pin", "signin"]):
+                log_type = "login_failure"
+        elif any(x in msg_lower for x in ["login", "auth", "authenticated"]) or (200 <= status < 300):
+            if any(x in msg_lower for x in ["login", "signin", "auth"]):
+                log_type = "login_success"
+        elif any(x in method_lower + msg_lower for x in ["iam", "policy", "role", "permission"]):
+            log_type = "iam_change"
+        elif any(x in msg_lower for x in ["scan", "probe", "discovery", "port"]):
+            log_type = "network_scan"
+        
+        # Format timestamp
+        ts_str = str(row.get("timestamp", ""))
+        try:
+            if 'T' in ts_str:
+                ts = dt.datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+            else:
+                ts = dt.datetime.strptime(ts_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=dt.timezone.utc)
+            formatted_ts = ts.strftime('%Y-%m-%dT%H:%M:%SZ')
+        except:
+            formatted_ts = ts_str
+        
+        # Build log entry
+        log_entry = {
+            "id": str(row.get("log_id", "")),
+            "type": log_type,
+            "sourceIp": row.get("ip") or "unknown",
+            "timestamp": formatted_ts,
+        }
+        
+        # Add optional fields
+        if row.get("identity"):
+            log_entry["user"] = row.get("identity")
+        if row.get("geo_country"):
+            log_entry["geo"] = row.get("geo_country")
+        if row.get("pod"):
+            log_entry["hostname"] = row.get("pod")
+        if row.get("service"):
+            log_entry["device"] = row.get("service")
+        
+        # IAM action
+        if log_type == "iam_change":
+            if "attach" in msg_lower:
+                log_entry["action"] = "policy_attached"
+            elif "escalat" in msg_lower:
+                log_entry["action"] = "role_escalated"
+            elif "create" in msg_lower:
+                log_entry["action"] = "resource_created"
+            elif "delete" in msg_lower:
+                log_entry["action"] = "resource_deleted"
+            else:
+                log_entry["action"] = "permission_changed"
+        
+        # VPN detection
+        if "vpn" in msg_lower or "remote" in str(row.get("identity", "")).lower():
+            log_entry["vpn"] = True
+        
+        frontend_logs.append(log_entry)
+    
+    return frontend_logs

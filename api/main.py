@@ -298,72 +298,31 @@ def ui_soc_dashboard(req: UiMockRequest = Depends()) -> dict[str, Any]:
 @app.get("/ui/mock-data")
 def ui_mock_data(req: UiMockRequest = Depends()) -> dict[str, Any]:
     """
-    Returns ALL log data with Sankey flow and complete fields for React UI
-    No filtering - returns real production data from ClickHouse
+    Returns ALL log data in frontend-compatible format (matching mockLogs structure)
     """
-    from api.dashboard_api import build_soc_dashboard_data
-    return build_soc_dashboard_data(
+    from api.dashboard_api import build_soc_dashboard_data, format_logs_for_frontend
+    
+    start_time = dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(hours=int(req.hours))
+    end_time = dt.datetime.now(tz=dt.timezone.utc)
+    
+    # Get full dashboard data
+    dashboard_data = build_soc_dashboard_data(
         ch=_ch(),
-        start=dt.datetime.now(tz=dt.timezone.utc) - dt.timedelta(hours=int(req.hours)),
-        end=dt.datetime.now(tz=dt.timezone.utc),
+        start=start_time,
+        end=end_time,
         service=req.service,
         namespace=req.namespace,
     )
-
-
-class NetworkFlowRequest(BaseModel):
-    """
-    Returns Sankey-ready data: { nodes: [...], links: [...] }
-    for network flow visualization (Source IP → Device/Service → Telemetry Type).
-    """
-
-    hours: int = Field(default=24, ge=1, le=168)
-    service: str | None = Field(default=None, description="Filter to a single service (e.g. fury)")
-    namespace: str | None = Field(default=None, description="Filter to a single namespace (e.g. apps)")
-    top_ips: int = Field(default=10, ge=5, le=50, description="Limit to top N source IPs by count")
-
-
-def _get_device_type(log: dict[str, Any]) -> str:
-    """Map log to device type category for Sankey middle layer."""
-    method = str(log.get("method") or "")
-    ip = str(log.get("ip") or "")
-    svc = str(log.get("service") or "")
-
-    # IAM / admin actions
-    if "iam" in method.lower() or "SetIamPolicy" in method or "CreateServiceAccount" in method:
-        return "admin-console"
-    # Failed logins / security
-    if ("login" in method.lower() or method == "app/login") and (
-        int(log.get("severity_num") or 0) >= 40 or int(log.get("status_code") or 0) >= 400
-    ):
-        return "firewall"
-    # Internal IPs (workstation/server)
-    if ip.startswith("192.168") or ip.startswith("10.0."):
-        return "workstation"
-    if ip.startswith("172."):
-        return "server"
-    # Otherwise use service name as device type
-    return svc or "router"
-
-
-def _get_telemetry_type(log: dict[str, Any]) -> str:
-    """Map log to telemetry type category for Sankey right layer."""
-    method = str(log.get("method") or "")
-    sev_num = int(log.get("severity_num") or 0)
-    status_code = int(log.get("status_code") or 0)
-
-    # Failed logins
-    if ("login" in method.lower() or method == "app/login") and (sev_num >= 40 or status_code >= 400):
-        return "security-logs"
-    # Successful logins
-    if ("login" in method.lower() or method == "app/login") and (sev_num < 40 and status_code < 400):
-        return "access-logs"
-    # IAM changes
-    if "iam" in method.lower() or "SetIamPolicy" in method or "CreateServiceAccount" in method:
-        return "audit-logs"
-    # Everything else
-    return "network-logs"
-
+    
+    # Add frontend-formatted logs
+    dashboard_data["logs"] = format_logs_for_frontend(
+        ch=_ch(),
+        start=start_time,
+        end=end_time,
+        limit=int(req.log_limit)
+    )
+    
+    return dashboard_data
 
 @app.get("/ui/network-flow")
 def ui_network_flow(req: NetworkFlowRequest = Depends()) -> dict[str, Any]:
