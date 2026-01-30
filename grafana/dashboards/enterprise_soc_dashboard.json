@@ -3,10 +3,16 @@
   "title": "SOC Ops (Production)",
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 11,
+  "version": 12,
   "refresh": "30s",
-  "tags": ["soc-lab", "production"],
-  "time": { "from": "now-6h", "to": "now" },
+  "tags": [
+    "soc-lab",
+    "production"
+  ],
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
   "templating": {
     "list": [
       {
@@ -14,7 +20,10 @@
         "type": "datasource",
         "label": "ClickHouse",
         "query": "grafana-clickhouse-datasource",
-        "current": { "text": "ClickHouse", "value": "ClickHouse" }
+        "current": {
+          "text": "ClickHouse",
+          "value": "ClickHouse"
+        }
       }
     ]
   },
@@ -22,8 +31,16 @@
     {
       "type": "stat",
       "title": "Total Logs (Last 6h)",
-      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -34,17 +51,38 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "options": { "graphMode": "area", "colorMode": "background" }
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background"
+      }
     },
     {
       "type": "stat",
       "title": "Total Anomalies (Last 6h)",
-      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -55,17 +93,42 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }, { "color": "red", "value": 100 }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "purple",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 100
+              }
+            ]
+          }
         }
       },
-      "options": { "graphMode": "area", "colorMode": "background" }
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background"
+      }
     },
     {
       "type": "stat",
       "title": "Anomaly Signals (Last 6h)",
-      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -76,17 +139,38 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "yellow",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "options": { "graphMode": "area", "colorMode": "background" }
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background"
+      }
     },
     {
       "type": "stat",
       "title": "Rule Matches (Last 6h)",
-      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -97,18 +181,38 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "color": { "mode": "thresholds" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+          "color": {
+            "mode": "thresholds"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "orange",
+                "value": null
+              }
+            ]
+          }
         }
       },
-      "options": { "graphMode": "area", "colorMode": "background" }
+      "options": {
+        "graphMode": "area",
+        "colorMode": "background"
+      }
     },
-
     {
       "type": "timeseries",
       "title": "Log Volume Over Time (5min intervals)",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -118,21 +222,75 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 10 }
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
-          { "matcher": { "id": "byName", "options": "Warnings" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
-          { "matcher": { "id": "byName", "options": "Info" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Errors"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Warnings"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "green"
+                }
+              }
+            ]
+          }
         ]
       }
     },
-
     {
       "type": "timeseries",
       "title": "Anomalies & Detections Timeline",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -147,21 +305,247 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 15 }
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "fillOpacity": 15
+          }
         },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Critical" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }] },
-          { "matcher": { "id": "byName", "options": "High" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-orange" } }] },
-          { "matcher": { "id": "byName", "options": "Signals" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Critical"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-red"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "High"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "dark-orange"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Signals"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "purple"
+                }
+              }
+            ]
+          }
         ]
       }
     },
-
+    {
+      "type": "table",
+      "title": "\ud83d\udd34 LIVE: Recent Logs Stream (Last 100)",
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S') AS \"Timestamp\",\n  severity AS \"Severity\",\n  service AS \"Service\",\n  namespace AS \"Namespace\",\n  ip AS \"Source IP\",\n  identity AS \"User/Identity\",\n  method AS \"Method\",\n  status_code AS \"Status\",\n  substring(message, 1, 120) AS \"Message\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 1 HOUR\n  AND method != 'k8s.inventory'\nORDER BY timestamp DESC\nLIMIT 100"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "CRITICAL": {
+                        "color": "dark-red"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "ERROR": {
+                        "color": "red"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "WARNING": {
+                        "color": "orange"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "INFO": {
+                        "color": "green"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "DEBUG": {
+                        "color": "blue"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 300
+                    },
+                    {
+                      "color": "orange",
+                      "value": 400
+                    },
+                    {
+                      "color": "red",
+                      "value": 500
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Timestamp"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 160
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Message"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 400
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "displayName": "Timestamp",
+            "desc": true
+          }
+        ],
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "countRows": false,
+          "fields": ""
+        }
+      }
+    },
     {
       "type": "table",
       "title": "Top 10 Services by Log Volume",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -172,27 +556,60 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Error Rate %" }, "properties": [
-            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
-            { "id": "thresholds", "value": {
-              "mode": "absolute",
-              "steps": [
-                { "color": "green", "value": null },
-                { "color": "yellow", "value": 5 },
-                { "color": "orange", "value": 10 },
-                { "color": "red", "value": 20 }
-              ]
-            }}
-          ]}
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Error Rate %"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 5
+                    },
+                    {
+                      "color": "orange",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 20
+                    }
+                  ]
+                }
+              }
+            ]
+          }
         ]
       }
     },
-
     {
       "type": "table",
       "title": "Recent Anomalies (Last 50)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
-      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 30
+      },
+      "datasource": {
+        "type": "grafana-clickhouse-datasource",
+        "uid": "${DS_CLICKHOUSE}"
+      },
       "targets": [
         {
           "refId": "A",
@@ -203,15 +620,61 @@
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          { "matcher": { "id": "byName", "options": "Severity" }, "properties": [
-            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
-            { "id": "mappings", "value": [
-              { "type": "value", "options": { "critical": { "color": "dark-red", "text": "CRITICAL" } } },
-              { "type": "value", "options": { "high": { "color": "dark-orange", "text": "HIGH" } } },
-              { "type": "value", "options": { "medium": { "color": "dark-yellow", "text": "MEDIUM" } } },
-              { "type": "value", "options": { "low": { "color": "dark-blue", "text": "LOW" } } }
-            ]}
-          ]}
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Severity"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "critical": {
+                        "color": "dark-red",
+                        "text": "CRITICAL"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "high": {
+                        "color": "dark-orange",
+                        "text": "HIGH"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "medium": {
+                        "color": "dark-yellow",
+                        "text": "MEDIUM"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "low": {
+                        "color": "dark-blue",
+                        "text": "LOW"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
         ]
       }
     }
