@@ -3,7 +3,7 @@
   "title": "SOC Ops (Production)",
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 12,
+  "version": 13,
   "refresh": "30s",
   "tags": [
     "soc-lab",
@@ -363,7 +363,7 @@
     },
     {
       "type": "table",
-      "title": "\ud83d\udd34 LIVE: Recent Logs Stream (Last 100)",
+      "title": "\ud83d\udd34 LIVE: Recent Logs Stream (Last 3 Hours)",
       "gridPos": {
         "h": 10,
         "w": 24,
@@ -378,7 +378,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT\n  formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S') AS \"Timestamp\",\n  severity AS \"Severity\",\n  service AS \"Service\",\n  namespace AS \"Namespace\",\n  ip AS \"Source IP\",\n  identity AS \"User/Identity\",\n  method AS \"Method\",\n  status_code AS \"Status\",\n  substring(message, 1, 120) AS \"Message\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 1 HOUR\n  AND method != 'k8s.inventory'\nORDER BY timestamp DESC\nLIMIT 100"
+          "rawSql": "SELECT\n  formatDateTime(timestamp, '%Y-%m-%d %H:%M:%S') AS \"Timestamp\",\n  severity AS \"Severity\",\n  service AS \"Service\",\n  namespace AS \"Namespace\",\n  ip AS \"Source IP\",\n  identity AS \"User/Identity\",\n  method AS \"Method\",\n  status_code AS \"Status\",\n  substring(message, 1, 120) AS \"Message\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 3 HOUR\n  AND method != 'k8s.inventory'\nORDER BY timestamp DESC\nLIMIT 100"
         }
       ],
       "fieldConfig": {
@@ -599,7 +599,7 @@
     },
     {
       "type": "table",
-      "title": "Recent Anomalies (Last 50)",
+      "title": "Recent Anomalies (Last 3 Hours)",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -614,7 +614,7 @@
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT\n  formatDateTime(created_at, '%Y-%m-%d %H:%M:%S') AS \"Time\",\n  risk_level AS \"Severity\",\n  service AS \"Service\",\n  detection_type AS \"Detection Type\",\n  substring(description, 1, 80) AS \"Description\"\nFROM soc.anomalies\nWHERE created_at >= now() - INTERVAL 6 HOUR\nORDER BY created_at DESC\nLIMIT 50"
+          "rawSql": "SELECT\n  formatDateTime(created_at, '%Y-%m-%d %H:%M:%S') AS \"Time\",\n  risk_level AS \"Severity\",\n  service AS \"Service\",\n  detection_type AS \"Detection Type\",\n  substring(description, 1, 80) AS \"Description\"\nFROM soc.anomalies\nWHERE created_at >= now() - INTERVAL 3 HOUR\nORDER BY created_at DESC\nLIMIT 50"
         }
       ],
       "fieldConfig": {
