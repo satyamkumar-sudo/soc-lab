@@ -3,7 +3,7 @@
   "title": "SOC Ops (Production)",
   "timezone": "utc",
   "schemaVersion": 39,
-  "version": 10,
+  "version": 11,
   "refresh": "30s",
   "tags": ["soc-lab", "production"],
   "time": { "from": "now-6h", "to": "now" },
@@ -21,26 +21,198 @@
   "panels": [
     {
       "type": "stat",
-      "title": "📊 System Status",
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 0 },
+      "title": "Total Logs (Last 6h)",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
       "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
       "targets": [
         {
           "refId": "A",
           "queryType": "sql",
-          "rawSql": "SELECT 'Ready for data ingestion' AS value"
+          "rawSql": "SELECT count() AS value FROM soc.enriched_logs WHERE timestamp >= now() - INTERVAL 6 HOUR AND method != 'k8s.inventory'"
         }
       ],
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
           "color": { "mode": "thresholds" },
           "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
         }
       },
-      "options": { 
-        "graphMode": "none", 
-        "colorMode": "background",
-        "textMode": "value_and_name"
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+    {
+      "type": "stat",
+      "title": "Total Anomalies (Last 6h)",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.anomalies WHERE created_at >= now() - INTERVAL 6 HOUR"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "purple", "value": null }, { "color": "red", "value": 100 }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+    {
+      "type": "stat",
+      "title": "Anomaly Signals (Last 6h)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.anomaly_signals WHERE window_start >= now() - INTERVAL 6 HOUR"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "yellow", "value": null }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+    {
+      "type": "stat",
+      "title": "Rule Matches (Last 6h)",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT count() AS value FROM soc.rule_matches WHERE created_at >= now() - INTERVAL 6 HOUR"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+        }
+      },
+      "options": { "graphMode": "area", "colorMode": "background" }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "Log Volume Over Time (5min intervals)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(timestamp) AS time,\n  count() AS \"Total Logs\",\n  countIf(severity = 'ERROR') AS \"Errors\",\n  countIf(severity = 'WARNING') AS \"Warnings\",\n  countIf(severity = 'INFO') AS \"Info\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 6 HOUR\n  AND method != 'k8s.inventory'\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Errors" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+          { "matcher": { "id": "byName", "options": "Warnings" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }] },
+          { "matcher": { "id": "byName", "options": "Info" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+        ]
+      }
+    },
+
+    {
+      "type": "timeseries",
+      "title": "Anomalies & Detections Timeline",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(created_at) AS time,\n  countIf(risk_level='critical') AS \"Critical\",\n  countIf(risk_level='high') AS \"High\",\n  countIf(risk_level='medium') AS \"Medium\",\n  countIf(risk_level='low') AS \"Low\"\nFROM soc.anomalies\nWHERE created_at >= now() - INTERVAL 6 HOUR\nGROUP BY time\nORDER BY time"
+        },
+        {
+          "refId": "B",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  toStartOfFiveMinute(window_start) AS time,\n  count() AS \"Signals\"\nFROM soc.anomaly_signals\nWHERE window_start >= now() - INTERVAL 6 HOUR\nGROUP BY time\nORDER BY time"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineInterpolation": "smooth", "lineWidth": 2, "fillOpacity": 15 }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Critical" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-red" } }] },
+          { "matcher": { "id": "byName", "options": "High" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "dark-orange" } }] },
+          { "matcher": { "id": "byName", "options": "Signals" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } }] }
+        ]
+      }
+    },
+
+    {
+      "type": "table",
+      "title": "Top 10 Services by Log Volume",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  service AS \"Service\",\n  namespace AS \"Namespace\",\n  count() AS \"Total Logs\",\n  countIf(severity = 'ERROR') AS \"Errors\",\n  round(countIf(severity = 'ERROR') * 100.0 / count(), 2) AS \"Error Rate %\"\nFROM soc.enriched_logs\nWHERE timestamp >= now() - INTERVAL 6 HOUR\n  AND service != ''\n  AND method != 'k8s.inventory'\nGROUP BY service, namespace\nORDER BY count() DESC\nLIMIT 10"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Error Rate %" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": {
+              "mode": "absolute",
+              "steps": [
+                { "color": "green", "value": null },
+                { "color": "yellow", "value": 5 },
+                { "color": "orange", "value": 10 },
+                { "color": "red", "value": 20 }
+              ]
+            }}
+          ]}
+        ]
+      }
+    },
+
+    {
+      "type": "table",
+      "title": "Recent Anomalies (Last 50)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "${DS_CLICKHOUSE}" },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "sql",
+          "rawSql": "SELECT\n  formatDateTime(created_at, '%Y-%m-%d %H:%M:%S') AS \"Time\",\n  risk_level AS \"Severity\",\n  service AS \"Service\",\n  detection_type AS \"Detection Type\",\n  substring(description, 1, 80) AS \"Description\"\nFROM soc.anomalies\nWHERE created_at >= now() - INTERVAL 6 HOUR\nORDER BY created_at DESC\nLIMIT 50"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "Severity" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "mappings", "value": [
+              { "type": "value", "options": { "critical": { "color": "dark-red", "text": "CRITICAL" } } },
+              { "type": "value", "options": { "high": { "color": "dark-orange", "text": "HIGH" } } },
+              { "type": "value", "options": { "medium": { "color": "dark-yellow", "text": "MEDIUM" } } },
+              { "type": "value", "options": { "low": { "color": "dark-blue", "text": "LOW" } } }
+            ]}
+          ]}
+        ]
       }
     }
   ]
