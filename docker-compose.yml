@@ -57,6 +57,9 @@ services:
       - ./data:/app/data:rw
       - ./secrets:/secrets:ro
       - ./kubeconfig:/kube:ro
+      # Optional: mount local gcloud auth so GKE kubeconfig exec auth works in-container.
+      # Needs to be writable because gcloud/plugin refresh tokens & writes logs.
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:rw
     depends_on:
       clickhouse:
         condition: service_healthy

@@ -176,9 +176,13 @@ class GCPLogFetcher:
                     reason="missing_credentials_or_project",
                     project=self.cfg.logging_project,
                     credentials_path=self.cfg.credentials_path,
-                    msg="Synthetic logs disabled; returning empty result",
+                    msg="Synthetic logs disabled; raising to fail ingestion",
                 )
-                return []
+                raise RuntimeError(
+                    "GCP log fetcher is not configured (missing credentials or project). "
+                    f"Expected credentials at {self.cfg.credentials_path}. "
+                    "Create/mount secrets/gcp-sa.json and set a valid GCP project."
+                )
             log.warning(
                 "gcp_fetcher_demo_mode",
                 reason="missing_credentials_or_project",
@@ -234,6 +238,23 @@ class GCPLogFetcher:
             payload["textPayload"] = entry.text_payload
         if entry.proto_payload:
             payload["protoPayload"] = json.loads(json.dumps(dict(entry.proto_payload), default=str))
+
+        # Canonical message at top level for normalizer and dashboards (INFO/ERROR logs)
+        _msg = ""
+        if entry.text_payload and isinstance(entry.text_payload, str):
+            _msg = entry.text_payload.strip()
+        if not _msg and payload.get("jsonPayload") and isinstance(payload["jsonPayload"], dict):
+            for k in ("message", "msg", "error", "reason", "description"):
+                v = payload["jsonPayload"].get(k)
+                if isinstance(v, str) and v.strip():
+                    _msg = v.strip()
+                    break
+        if not _msg and payload.get("protoPayload") and isinstance(payload["protoPayload"], dict):
+            status = payload["protoPayload"].get("status") or {}
+            if isinstance(status, dict) and status.get("message"):
+                _msg = str(status["message"]).strip()
+        if _msg:
+            payload["message"] = _msg
 
         proto = payload.get("protoPayload", {})
         auth = (proto or {}).get("authenticationInfo", {}) if isinstance(proto, dict) else {}

@@ -578,7 +578,12 @@ def format_logs_for_frontend(ch, start: dt.datetime, end: dt.datetime, limit: in
     """
     query = f"""
     SELECT
-        concat(toString(id), '-', toString(toUnixTimestamp(timestamp))) AS log_id,
+        -- enriched_logs has no `id`; generate a stable ID from existing fields
+        concat(
+          toString(toUnixTimestamp(timestamp)),
+          '-',
+          toString(sipHash64(concat(service,'|',namespace,'|',pod,'|',ip,'|',request_id,'|',message)))
+        ) AS log_id,
         timestamp,
         severity,
         service,

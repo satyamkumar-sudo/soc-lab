@@ -5,6 +5,7 @@ import datetime as dt
 import os
 import math
 from functools import lru_cache
+from contextlib import asynccontextmanager
 from typing import Any
 
 import structlog
@@ -23,6 +24,7 @@ from agents.base_agent import TimeWindow
 from alerts.notifier import AlertNotifier
 from ingestion.aks_fetcher import AKSLogFetcher
 from ingestion.gcp_fetcher import GCPLogFetcher
+from ingestion.k8s_pod_logs_fetcher import K8sPodLogFetcher
 from ingestion.k8s_inventory import K8sInventoryFetcher
 from storage.clickhouse_client import ClickHouseClient
 
@@ -41,14 +43,24 @@ def _configure_logging() -> None:
 _configure_logging()
 log = structlog.get_logger(__name__)
 
-app = FastAPI(title="SOC Lab API", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Run migrations once at startup.
+    _apply_clickhouse_migrations(_ch())
+    yield
+
+
+app = FastAPI(title="SOC Lab API", version="1.0.0", lifespan=lifespan)
 
 # CORS for local React UI dev.
 _cors_origins = [o.strip() for o in os.environ.get("SOC_UI_CORS_ORIGINS", "*").split(",") if o.strip()]
+# If "*" is present (or defaulted), allow any origin.
+_allow_all_origins = (not _cors_origins) or ("*" in _cors_origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins if _cors_origins != ["*"] else ["*"],
-    allow_credentials=True,
+    allow_origins=["*"] if _allow_all_origins else _cors_origins,
+    # Browsers disallow credentials with wildcard origin. Keep credentials only for explicit origin lists.
+    allow_credentials=False if _allow_all_origins else True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -85,6 +97,48 @@ class UiHeavyRequest(BaseModel):
         return now - dt.timedelta(hours=6), now
 
 
+class NetworkFlowRequest(BaseModel):
+    """Query params for /ui/network-flow Sankey diagram data."""
+
+    hours: int = Field(default=24, ge=1, le=168, description="Time window in hours")
+    top_ips: int = Field(default=20, ge=5, le=100, description="Top N source IPs to include")
+    service: str | None = Field(default=None, description="Filter by service (e.g. fury)")
+    namespace: str | None = Field(default=None, description="Filter by namespace")
+
+
+def _get_network_flow_request(
+    hours: int = Query(default=24, ge=1, le=168),
+    top_ips: int = Query(default=20, ge=5, le=100),
+    service: str | None = Query(default=None),
+    namespace: str | None = Query(default=None),
+) -> NetworkFlowRequest:
+    return NetworkFlowRequest(hours=hours, top_ips=top_ips, service=service, namespace=namespace)
+
+
+def _get_device_type(r: dict[str, Any]) -> str:
+    """Infer device/layer from log row for Sankey (source → device → telemetry)."""
+    method = str(r.get("method") or "")
+    service = str(r.get("service") or "")
+    if "istio" in method.lower():
+        return "istio-gateway"
+    if "gateway" in service.lower():
+        return "api-gateway"
+    if "proxy" in service.lower():
+        return "proxy"
+    return service or "unknown"
+
+
+def _get_telemetry_type(r: dict[str, Any]) -> str:
+    """Infer telemetry type from log row for Sankey."""
+    severity_num = r.get("severity_num") or 0
+    status_code = r.get("status_code") or 0
+    if severity_num and int(severity_num) > 1:
+        return "security-logs"
+    if status_code and int(status_code) >= 400:
+        return "error-logs"
+    return "access-logs"
+
+
 class UiMockRequest(BaseModel):
     """
     Returns data in the exact shape of the React mock:
@@ -109,7 +163,6 @@ def _require_mtls(x_client_subject: str | None) -> None:
 def _ch() -> ClickHouseClient:
     ch = ClickHouseClient()
     ch.wait_until_ready(timeout_s=60)
-    _apply_clickhouse_migrations(ch)
     return ch
 
 
@@ -173,9 +226,9 @@ def _apply_clickhouse_migrations(ch: ClickHouseClient) -> None:
         log.exception("clickhouse_migrations_failed", error=str(e))
 
 
-@app.on_event("startup")
-def _migrate_clickhouse() -> None:
-    _apply_clickhouse_migrations(_ch())
+## NOTE:
+## FastAPI deprecated @app.on_event("startup") in favor of lifespan handlers.
+## Startup work is performed in the lifespan() context manager above.
 
 
 def _infer_field_type(v: Any) -> str:
@@ -325,7 +378,7 @@ def ui_mock_data(req: UiMockRequest = Depends()) -> dict[str, Any]:
     return dashboard_data
 
 @app.get("/ui/network-flow")
-def ui_network_flow(req: NetworkFlowRequest = Depends()) -> dict[str, Any]:
+def ui_network_flow(req: NetworkFlowRequest = Depends(_get_network_flow_request)) -> dict[str, Any]:
     """
     Pre-aggregated Sankey diagram data for network flow visualization.
     Returns { nodes: [{id, name, category}, ...], links: [{source, target, value}, ...] }
@@ -535,12 +588,22 @@ def ui_heavy(req: UiHeavyRequest) -> dict[str, Any]:
 def fetch_store_raw(req: WindowRequest, x_client_subject: str | None = Header(default=None)) -> dict[str, Any]:
     _require_mtls(x_client_subject)
     provider = os.environ.get("SOC_INGEST_PROVIDER", "gcp").strip().lower()
-    if provider == "azure":
-        fetcher = AKSLogFetcher()
-        rows = fetcher.fetch(start=req.start, end=req.end)
-    else:
-        fetcher = GCPLogFetcher()
-        rows = fetcher.fetch(start=req.start, end=req.end)
+    try:
+        if provider == "azure":
+            fetcher = AKSLogFetcher()
+            rows = fetcher.fetch(start=req.start, end=req.end)
+        else:
+            fetcher = GCPLogFetcher()
+            rows = fetcher.fetch(start=req.start, end=req.end)
+    except RuntimeError as e:
+        # If Cloud Logging creds are missing, fall back to Kubernetes pod logs
+        # (works when kubeconfig is configured via `gcloud container clusters get-credentials`).
+        try:
+            k8s_fetcher = K8sPodLogFetcher()
+            rows = k8s_fetcher.fetch(start=req.start, end=req.end)
+            provider = "k8s"
+        except Exception as e2:
+            raise HTTPException(status_code=503, detail=f"{e} | k8s_fallback_failed: {e2}") from e2
     inserted = _ch().insert_json_payload_rows("raw_logs", rows)
     return {"inserted_raw": inserted, "provider": provider}
 
@@ -653,6 +716,48 @@ class AlertWebSocketManager:
 
 
 _ws_manager = AlertWebSocketManager()
+
+
+class WsTestErrorRequest(BaseModel):
+    title: str = Field(default="TEST: WebSocket error", description="Alert title")
+    message: str = Field(default="Simulated socket error for UI testing", description="Human message")
+    risk_level: str = Field(default="high", description="critical|high|medium|low")
+    code: str = Field(default="WS_TEST_ERROR", description="Machine error code")
+
+
+@app.post("/internal/ws/test-error")
+async def ws_test_error(req: WsTestErrorRequest, x_client_subject: str | None = Header(default=None)) -> dict[str, Any]:
+    """
+    Broadcast a dummy 'error-like' alert over /ws/alerts for UI testing.
+    Does NOT write to ClickHouse.
+    Requires mTLS (through gateway /internal/).
+    """
+    _require_mtls(x_client_subject)
+    if not _ws_manager.active_connections:
+        return {"broadcasted": False, "connections": 0, "reason": "no_ws_clients_connected"}
+
+    payload = {
+        "type": "alert",  # keep frontend-compatible (same as real alerts)
+        "timestamp": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "data": {
+            "id": f"ws-test-{int(dt.datetime.now(dt.timezone.utc).timestamp())}",
+            "created_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "fingerprint": "ws-test-error",
+            "channel": "none",
+            "risk_level": req.risk_level,
+            "title": req.title,
+            "message": req.message,
+            "payload": {
+                "kind": "socket_error",
+                "code": req.code,
+                "simulated": True,
+            },
+            "sent": 0,
+        },
+    }
+
+    await _ws_manager.broadcast(payload)
+    return {"broadcasted": True, "connections": len(_ws_manager.active_connections)}
 
 
 async def _broadcast_latest_alert():
@@ -811,38 +916,6 @@ def list_alerts(
     }
 
 
-@app.get("/api/alerts/{alert_id}")
-def get_alert(alert_id: str) -> dict[str, Any]:
-    """
-    Get a single alert by ID.
-    
-    Example: GET /api/alerts/550e8400-e29b-41d4-a716-446655440000
-    """
-    ch = _ch()
-    alerts = ch.fetch_dicts(
-        """
-        SELECT id, created_at, fingerprint, channel, risk_level, title, message,
-               toJSONString(payload) AS payload_json, sent
-        FROM alerts
-        WHERE id = %(id)s
-        """,
-        {"id": alert_id}
-    )
-    
-    if not alerts:
-        raise HTTPException(status_code=404, detail="Alert not found")
-    
-    alert = alerts[0]
-    try:
-        alert["payload"] = json.loads(alert.get("payload_json", "{}"))
-    except:
-        alert["payload"] = {}
-    alert.pop("payload_json", None)
-    alert["id"] = str(alert["id"])
-    
-    return alert
-
-
 @app.get("/api/alerts/stats")
 def get_alert_stats(
     from_date: str | None = Query(default=None, description="From date (ISO-8601, default: last 24h)"),
@@ -857,20 +930,24 @@ def get_alert_stats(
     """
     ch = _ch()
     
-    # Default to last 24 hours
-    if not from_date:
-        from_date = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=1)).isoformat()
-    if not to_date:
-        to_date = dt.datetime.now(dt.timezone.utc).isoformat()
-    
-    params = {"from_date": from_date, "to_date": to_date}
+    # Default to last 24 hours.
+    # IMPORTANT: pass real datetimes to ClickHouse so formatting is compatible (no "+00:00" strings).
+    now = dt.datetime.now(dt.timezone.utc)
+    from_dt = _parse_dt(from_date) if from_date else (now - dt.timedelta(days=1))
+    to_dt = _parse_dt(to_date) if to_date else now
+    if from_dt is None:
+        from_dt = now - dt.timedelta(days=1)
+    if to_dt is None:
+        to_dt = now
+
+    params = {"from_date": from_dt, "to_date": to_dt}
     
     # Total counts
     totals = ch.fetch_dicts(
         """
         SELECT count() AS total,
-               countIf(sent = 1) AS sent,
-               countIf(sent = 0) AS not_sent
+               countIf(sent = 1) AS sent_count,
+               countIf(sent = 0) AS not_sent_count
         FROM alerts
         WHERE created_at >= %(from_date)s AND created_at <= %(to_date)s
         """,
@@ -914,12 +991,56 @@ def get_alert_stats(
     )
     
     return {
-        "period": {"from": from_date, "to": to_date},
-        "totals": totals[0] if totals else {"total": 0, "sent": 0, "not_sent": 0},
+        "period": {
+            "from": from_dt.isoformat().replace("+00:00", "Z"),
+            "to": to_dt.isoformat().replace("+00:00", "Z"),
+        },
+        "totals": (
+            {
+                "total": int((totals[0] or {}).get("total", 0)) if totals else 0,
+                "sent": int((totals[0] or {}).get("sent_count", 0)) if totals else 0,
+                "not_sent": int((totals[0] or {}).get("not_sent_count", 0)) if totals else 0,
+            }
+            if totals
+            else {"total": 0, "sent": 0, "not_sent": 0}
+        ),
         "by_risk_level": by_risk,
         "by_channel": by_channel,
         "timeline": timeline
     }
+
+
+# IMPORTANT: keep this route AFTER /api/alerts/stats (otherwise "stats" is treated as alert_id).
+@app.get("/api/alerts/{alert_id}")
+def get_alert(alert_id: str) -> dict[str, Any]:
+    """
+    Get a single alert by ID.
+
+    Example: GET /api/alerts/550e8400-e29b-41d4-a716-446655440000
+    """
+    ch = _ch()
+    alerts = ch.fetch_dicts(
+        """
+        SELECT id, created_at, fingerprint, channel, risk_level, title, message,
+               toJSONString(payload) AS payload_json, sent
+        FROM alerts
+        WHERE id = %(id)s
+        """,
+        {"id": alert_id},
+    )
+
+    if not alerts:
+        raise HTTPException(status_code=404, detail="Alert not found")
+
+    alert = alerts[0]
+    try:
+        alert["payload"] = json.loads(alert.get("payload_json", "{}"))
+    except Exception:
+        alert["payload"] = {}
+    alert.pop("payload_json", None)
+    alert["id"] = str(alert["id"])
+
+    return alert
 
 
 def main() -> None:

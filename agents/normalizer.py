@@ -86,20 +86,36 @@ def _extract_request_id(payload: dict[str, Any]) -> str:
     return ""
 
 
+# Keys to try when extracting log message (order matters: prefer primary then fallbacks)
+_MESSAGE_KEYS = (
+    "message", "msg", "error", "exception", "detail",
+    "reason", "description", "summary", "error_message", "errorMessage",
+    "error_detail", "failure_reason",
+)
+
+
 def _extract_message(payload: Any) -> str:
     if not isinstance(payload, dict):
         return ""
     # Some sources (synthetic / custom shippers) put fields at the top level.
-    for k in ("message", "msg", "error", "exception", "detail"):
+    for k in _MESSAGE_KEYS:
         v = payload.get(k)
         if isinstance(v, str) and v.strip():
             return v.strip()
+        if isinstance(v, dict) and (v.get("message") or v.get("msg")):
+            s = v.get("message") or v.get("msg")
+            if isinstance(s, str) and s.strip():
+                return s.strip()
     jp = payload.get("jsonPayload")
     if isinstance(jp, dict):
-        for k in ("message", "msg", "error", "exception", "detail"):
+        for k in _MESSAGE_KEYS:
             v = jp.get(k)
             if isinstance(v, str) and v.strip():
                 return v.strip()
+            if isinstance(v, dict) and (v.get("message") or v.get("msg")):
+                s = v.get("message") or v.get("msg")
+                if isinstance(s, str) and s.strip():
+                    return s.strip()
     tp = payload.get("textPayload")
     if isinstance(tp, str) and tp.strip():
         return tp.strip()
@@ -110,6 +126,14 @@ def _extract_message(payload: Any) -> str:
             msg = status.get("message")
             if isinstance(msg, str) and msg.strip():
                 return msg.strip()
+        # gRPC / API errors sometimes in status.details or first detail message
+        details = proto.get("details") or proto.get("status", {}).get("details")
+        if isinstance(details, list) and details:
+            first = details[0]
+            if isinstance(first, dict):
+                m = first.get("message") or first.get("detail") or first.get("reason")
+                if isinstance(m, str) and m.strip():
+                    return m.strip()
     return ""
 
 
@@ -148,6 +172,47 @@ def _extract_status_code(payload: Any) -> int:
             if isinstance(code, str) and code.isdigit():
                 return int(code)
     return 0
+
+
+def _format_log_message(
+    severity: str,
+    service: str,
+    method: str,
+    status_code: int,
+    message: str,
+    identity: str,
+    ip: str,
+) -> str:
+    """
+    Build a consistent, human-readable one-liner for each log for display in dashboards and API.
+    Preserves INFO/ERROR context and key fields without duplicating the raw message.
+    """
+    parts: list[str] = []
+    sev = (severity or "INFO").upper()
+    if sev in ("ERROR", "CRITICAL", "WARNING"):
+        parts.append(f"[{sev}]")
+    if service and service != "unknown":
+        parts.append(f"{service}:")
+    if method:
+        if status_code and status_code >= 400:
+            parts.append(f"{method} → {status_code}")
+        else:
+            parts.append(method)
+    if message:
+        # Use raw message; cap length for display
+        display_msg = message.strip()
+        if len(display_msg) > 200:
+            display_msg = display_msg[:197] + "..."
+        parts.append(display_msg)
+    if not parts:
+        return "Log event"
+    line = " ".join(parts)
+    # Optionally append identity/IP for auth/security logs when message doesn't already mention them
+    if identity and "user" not in line.lower() and "identity" not in line.lower():
+        line += f" (user={identity})"
+    if ip and ip not in line and "ip" not in line.lower():
+        line += f" from {ip}"
+    return line[:2000]
 
 
 def _error_signature(message: str) -> str:
@@ -191,12 +256,21 @@ class NormalizerAgent(BaseAgent):
             ip = _ip_norm(str(r.get("ip") or ""))
             sev = str(r.get("severity") or "DEFAULT").upper()
             sev_num = _sev_num(sev)
+            method = str(r.get("method") or "")
+            identity = _extract_identity(payload, str(r.get("user") or ""))
 
             msg = _extract_message(payload)
             status_code = int(_extract_status_code(payload) or 0)
             is_failure = bool(sev_num >= 40 or status_code >= 400)
             is_success = int((not is_failure) and (status_code == 0 or status_code < 400))
             sig = _error_signature(msg) if is_failure else ""
+
+            # Formatted one-liner for dashboards/API; fallback to raw message when formatted is trivial
+            display_message = _format_log_message(sev, svc, method, status_code, msg, identity, ip)
+            if msg and (not display_message or display_message == "Log event"):
+                display_message = msg
+            if not display_message:
+                display_message = ""
 
             out_rows.append(
                 {
@@ -208,12 +282,12 @@ class NormalizerAgent(BaseAgent):
                     "service": svc,
                     "severity": sev,
                     "severity_num": sev_num,
-                    "identity": _extract_identity(payload, str(r.get("user") or "")),
-                    "method": str(r.get("method") or ""),
+                    "identity": identity,
+                    "method": method,
                     "ip": ip,
                     "resource": str(r.get("resource") or ""),
                     "request_id": _extract_request_id(payload),
-                    "message": msg[:2000] if msg else "",
+                    "message": display_message[:2000] if display_message else "",
                     "status_code": status_code,
                     "is_success": is_success,
                     "error_signature": sig,
